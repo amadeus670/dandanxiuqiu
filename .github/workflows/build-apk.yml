@@ -1,0 +1,58 @@
+name: Build and publish APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.5
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Run tests and build debug APK
+        run: gradle --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Prepare downloadable APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk dandanxiuqiu-debug.apk
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: dandanxiuqiu-debug.apk
+          archive: false
+          retention-days: 90
+
+      - name: Publish latest APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest dandanxiuqiu-debug.apk --clobber
+          else
+            gh release create latest dandanxiuqiu-debug.apk \
+              --title "弹弹堂力度计算器（最新版）" \
+              --notes "由 GitHub Actions 自动构建。当前为可直接安装的 debug APK。" \
+              --latest
+          fi
